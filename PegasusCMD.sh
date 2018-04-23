@@ -7,7 +7,7 @@ echo "${master_dir}"
 
 if  [ $1 == manual ];            
     then
-    less "${master_dir}/misc/manual.txt"
+    less "${master_dir}/databases/help.txt"
 exit 0
 fi
 
