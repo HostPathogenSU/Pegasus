@@ -1,38 +1,35 @@
 #!/bin/bash
-#to do: Make structural variant calling optional, i e add new var to the menu also change this in the help menu. Will make life easier. 
-#		Could also consider adding a postpipe comeback script. Which will only analyse targets etc. 
+#to do: add CDD1551 database
 # master pipeline
-time_start="$(date +%H.%m.%s.%N)"
-master_dir="$(pwd "$0")"
+time_start=$(date +%H.%m.%s.%N)
+master_dir=$(pwd "$0")
 echo "${master_dir}"
 
-if  [ "${1}" == manual ];            
+if  [ $1 == manual ];            
     then
     less "${master_dir}/misc/manual.txt"
 exit 0
 fi
 
-if [[ "${1}" == -h || "${1}" == --help || "${1}" == "" ]];
+if [[ $1 == -h || $1 == --help || $1 == "" ]];
 	then
 	cat "${master_dir}/misc/help.txt"
 exit 0
 fi
 #set environment variables
 
-raw_files="$1"    				#Path to raw file directory
-files_in="$2" 					#path to sample names
-out_dir="$3" 					#path to output directory
-threads="$4"					#amount of cores
-ram="$5"						#amount of ram
-snp_calling="$6" 				#snp calling yes or no
-sv_calling="$7"					#structural variant calling
-lineage_calling="$8"			#only compatible with H37Rv
-gene_fusions="${9}"				#call gene fusions
-tree="{$10}"					#get files for tree
-ref_user="${11}"				#reference file
-#ref_novo=${10}					#reference index file for novo.ndx
-regions_of_interest="${12}"		#file to target list
-debug="${13}"					#run in verbose mode
+raw_files="$1"    		#Path to raw file directory
+files_in="$2" 			#path to sample names
+out_dir="$3" 			#path to output directory
+threads="$4"			#amount of cores
+ram="$5"			#amount of ram
+snp_calling="$6" 		#snp calling yes or no
+sv_calling="$7"			#structural variant calling
+lineage_calling="$8"		#only compatible with H37Rv
+ref_user="$9"			#reference file
+#ref_novo=${10}			#reference index file for novo.ndx
+regions_of_interest="${10}"	#file to target list
+debug="${11}"			#run in verbose mode
 
 if [[ "${debug}" == "TRUE" ]];
 	then 
@@ -105,7 +102,7 @@ if [[ -s "$regions_of_interest" ]];
       
        
 fi
-net_app
+
 
 #set the reference
 if [[ "${ref_user}" == H37Rv ]];  #I want to add a user based reference but will do that later
@@ -117,7 +114,7 @@ fi
 
 if [[ "${ref_user}" == CDC1551 ]];  
    then
-   echo "H37Rv was chosen as a reference" >> "$log"
+   echo "CDC1551 was chosen as a reference" >> "$log"
    ref="${master_dir}/references/CDC1551/CDC1551.fasta"
    ref_novo="${master_dir}/references/CDC1551/CDC1551.ndx"	
 fi
@@ -126,14 +123,14 @@ fi
        
 
 
-#set up directories of common fils NB ln-s (link) [[[I think i want to remove this]]]
-if [[ "${snp_calling}" == "TRUE" ]];
+#set up directories of common fils NB ln-s (link) 
+if [[ $snp_calling == "TRUE" ]];
   then
   vcf="${out_dir}/vcf"
   mkdir "${vcf}"
 fi
 
-if [[ "${sv_calling}" == "TRUE" ]];
+if [[ $sv_calling == "TRUE" ]];
   then
   SV="${out_dir}/SV"
   mkdir "${SV}"
@@ -141,7 +138,7 @@ fi
 
 #source the functions
 
-source "${master_dir}/scripts/main_functions.sh"
+source "${master_dir}/main_functions.sh"
 
 #start the mainloop
 while IFS='' read -r sample || [[ -n "$sample" ]];  
@@ -173,15 +170,11 @@ do
 
 	if [[ $lineage_calling == "TRUE" ]];
   	then 
-		lineage_dir="${out_dir_2}/TBprofiler"
+		lineage_dir="${out_dir_2}/lineages_drugresistance"
 		mkdir "${lineage_dir}"
 	fi
 
-	if [[ "${tree}" == "TRUE" ]];
-	then
-		tree_dir="${out_dir_2}/Tree"
-		mkdir "${tree_dir}"
-    raw_1="${raw_files}/${sample}_R1_001.fastq.gz"
+    	raw_1="${raw_files}/${sample}_R1_001.fastq.gz"
    	raw_2="${raw_files}/${sample}_R2_001.fastq.gz"
 
 #start with analysis
@@ -214,7 +207,7 @@ do
 	
 	
 #variant calling
-	if [[ "${snp_calling}" == "TRUE" ]];
+	if [[ $snp_calling == "TRUE" ]];
 	then 
 		snp_gatk_novo &
 		snp_gatk_bwa &
@@ -225,11 +218,6 @@ do
 	
 		echo "snp calling done" >> "${log}"
 		#tree functions?
-		if [[ "${tree|" == "TRUE" ]];
-		then 
-			echo "Drawing files for trees, send through snpTREE" >> "${log}"
-			tree_draw_files
-		fi
 	fi
 
 #Structural variant calling: we will intersect the whole thing but lets first check the output
@@ -240,12 +228,10 @@ do
 		delly_bwa &
 		wait 
 		lumpy_delly_isec 
-			if [[ "${gene_fusions}" == "TRUE" ]]; # made gene fusions optional here. Will still do a first pass over the SV calling and call GF if asked for
-			then 
-				gene_fusion_calling
-			fi
+		gene_fusion_calling
+		
 	fi
-
+	
 #moving on to targeted so long, we can get back later
 	if [[ -s "$regions_of_interest" ]];
    	then
@@ -270,7 +256,6 @@ do
 
 rm -r "${temp}"	
 done<$files_in
-time_end=$(date +%H.%m.%s.%N)
-time_diff=${echo $time_start - $time_end | bc}
-echo "it takes ${time_diff} to execute the pipeline" >> "${log}"
+
 exit 0
+
