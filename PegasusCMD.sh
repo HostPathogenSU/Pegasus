@@ -1,35 +1,34 @@
 #!/bin/bash
-#to do: add CDD1551 database
+#to do: Make structural variant calling optional, i e add new var to the menu also change this in the help menu. Will make life easier. 
+#		Could also consider adding a postpipe comeback script. Which will only analyse targets etc. 
 # master pipeline
-time_start=$(date +%H.%m.%s.%N)
-master_dir=$(pwd "$0")
+master_dir="$(pwd "$0")"
 echo "${master_dir}"
 
-if  [ $1 == manual ];            
+if  [ "${1}" == manual ];            
     then
-    less "${master_dir}/databases/help.txt"
+    less "${master_dir}/misc/manual.txt"
 exit 0
 fi
 
-if [[ $1 == -h || $1 == --help || $1 == "" ]];
+if [[ "${1}" == -h || "${1}" == --help || "${1}" == "" ]];
 	then
 	cat "${master_dir}/misc/help.txt"
 exit 0
 fi
 #set environment variables
 
-raw_files="$1"    		#Path to raw file directory
-files_in="$2" 			#path to sample names
-out_dir="$3" 			#path to output directory
-threads="$4"			#amount of cores
-ram="$5"			#amount of ram
-snp_calling="$6" 		#snp calling yes or no
-sv_calling="$7"			#structural variant calling
-lineage_calling="$8"		#only compatible with H37Rv
-ref_user="$9"			#reference file
-#ref_novo=${10}			#reference index file for novo.ndx
-regions_of_interest="${10}"	#file to target list
-debug="${11}"			#run in verbose mode
+raw_files="$1"    				#Path to raw file directory
+files_in="$2" 					#path to sample names
+out_dir="$3" 					#path to output directory
+threads="$4"					#amount of cores
+ram="$5"						#amount of ram
+sv_calling="$6"					#structural variant calling
+gene_fusions="${7}"				#call gene fusions
+ref_user="${8}"				#reference file
+#ref_novo=${9}					#reference index file for novo.ndx
+regions_of_interest="${10}"		#file to target list
+debug="${11}"					#run in verbose mode
 
 if [[ "${debug}" == "TRUE" ]];
 	then 
@@ -62,27 +61,6 @@ export PATH=$PATH:"${master_dir}/programs/samblaster"
 #mkdir "${out_dir}"
 log="${out_dir}/log.txt"
 
-#Environment check
-echo "Checking user required tools...." >> "$log"
-#samtools
-if ! [ -x "$(command -v samtools)" ];
-then
-    echo "samtools is not found in your system, Please install samtools in your ./bin directory" >> "$log"
-    echo "Aborting..."
-    exit 1
-else
-    echo "samtools found" >> "$log"
-fi
-#bcftools
-if ! [ -x "$(command -v bcftools)" ];
-then
-    echo "bcftools is not found in your system, Please install bcftools in your ./bin directory" >> "$log"
-    echo "Aborting..."
-    exit 1
-else
-    echo "bcftools found" >> "$log"
-fi
-
 #checking input files 
 # testing input file integrity
 
@@ -100,8 +78,7 @@ if [[ -s "$regions_of_interest" ]];
    else
        echo "your regions file is empty, assuming discovery option" >> "$log"
       
-       
-fi
+ fi
 
 
 #set the reference
@@ -114,23 +91,15 @@ fi
 
 if [[ "${ref_user}" == CDC1551 ]];  
    then
-   echo "CDC1551 was chosen as a reference" >> "$log"
+   echo "H37Rv was chosen as a reference" >> "$log"
    ref="${master_dir}/references/CDC1551/CDC1551.fasta"
    ref_novo="${master_dir}/references/CDC1551/CDC1551.ndx"	
 fi
   
       
-       
+#set up directories of common fils NB ln-s (link) [[[I think i want to remove this]]]
 
-
-#set up directories of common fils NB ln-s (link) 
-if [[ $snp_calling == "TRUE" ]];
-  then
-  vcf="${out_dir}/vcf"
-  mkdir "${vcf}"
-fi
-
-if [[ $sv_calling == "TRUE" ]];
+if [[ "${sv_calling}" == "TRUE" ]];
   then
   SV="${out_dir}/SV"
   mkdir "${SV}"
@@ -144,8 +113,8 @@ source "${master_dir}/main_functions.sh"
 while IFS='' read -r sample || [[ -n "$sample" ]];  
 do
 	echo "Starting analysis of ${sample}" >> "$log" 
-    	mkdir "${out_dir}/${sample}"
-    	out_dir_2="${out_dir}/${sample}"
+    mkdir "${out_dir}/${sample}"
+    out_dir_2="${out_dir}/${sample}"
    	data="${out_dir_2}/data"
    	mkdir "${data}"
    	temp="${out_dir_2}/temp"
@@ -162,30 +131,11 @@ do
 		mkdir "${chimera_dir}"
 	fi
 	
-	if [[ $snp_calling == "TRUE" ]];
-  	then 
-		snp_dir="${out_dir_2}/snps"
-		mkdir "${snp_dir}"
-	fi
-
-	if [[ $lineage_calling == "TRUE" ]];
-  	then 
-		lineage_dir="${out_dir_2}/lineages_drugresistance"
-		mkdir "${lineage_dir}"
-	fi
-
-    	raw_1="${raw_files}/${sample}_R1_001.fastq.gz"
+    raw_1="${raw_files}/${sample}_R1_001.fastq.gz"
    	raw_2="${raw_files}/${sample}_R2_001.fastq.gz"
 
 #start with analysis
-#TBprofiler if lineage was requested
-	if [[ $lineage_calling == "TRUE" ]];
-	then 
-		TBprofiler
-	else
-		echo "TBprofiler not initiated, moving on" "${log}"
 
-	fi
 #stats
 	fastqc_1
 #trim
@@ -197,28 +147,13 @@ do
 #use multiprocessing
 	echo "Initialising best practises workflow" >> "${log}"
 	BWA
-  
+	wait
 	novo 
 	wait
 	
 	echo "Best practises is done moving on to variant calling" >> "${log}"
 
 #GATK best practises
-	
-	
-#variant calling
-	if [[ $snp_calling == "TRUE" ]];
-	then 
-		snp_gatk_novo &
-		snp_gatk_bwa &
-		snps_pileup_novo &
-		snps_pileup_bwa &
-		wait
-		intersect_snps_indel
-	
-		echo "snp calling done" >> "${log}"
-		#tree functions?
-	fi
 
 #Structural variant calling: we will intersect the whole thing but lets first check the output
 	if [[ $sv_calling == "TRUE" ]];
@@ -227,12 +162,23 @@ do
 		lumpy_novo &
 		delly_bwa &
 		wait 
-		lumpy_delly_isec 
-		gene_fusion_calling
-		
+		lumpy_delly_isec
+
 	fi
 	
-#moving on to targeted so long, we can get back later
+	if [[ "${gene_fusions}" == "TRUE" ]]; # made gene fusions optional here. Will still do a first pass over the SV calling and call GF if asked for
+	then 
+		lumpy_bwa &
+		lumpy_novo &
+		delly_bwa &
+		wait 
+		lumpy_delly_isec
+		wait
+		gene_fusion_calling
+	fi
+	
+
+#moving on to targeted so long, we can get back later Make this optional
 	if [[ -s "$regions_of_interest" ]];
    	then
    	echo "starting on targeted analysis" >> "$log"
@@ -256,6 +202,7 @@ do
 
 rm -r "${temp}"	
 done<$files_in
-
+time_end=$(date +%H.%m.%s.%N)
+time_diff=${echo $time_start - $time_end | bc}
+echo "it takes ${time_diff} to execute the pipeline" >> "${log}"
 exit 0
-
